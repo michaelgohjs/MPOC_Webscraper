@@ -1,0 +1,87 @@
+Sub get_table()
+    
+    'Disable functions for efficiency
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Data")
+    'Desired URL and table containing Header
+    Dim URL As String, Header As String
+    
+    URL = ws.Range("B5").Value
+    Header = ws.Range("B6").Value
+
+    Dim oDom As Object: Set oDom = CreateObject("htmlFile")
+    Dim oTable As Object
+    Dim x As Long, y As Long
+    Dim oRow As Object, oCell As Object
+    Dim data
+    
+    y = 1: x = 1
+    With CreateObject("msxml2.xmlhttp")
+        .Open "GET", URL, False
+        .send
+        oDom.body.innerHTML = .responseText
+    End With
+    
+    'iterate over all tables to find identifier
+    For Each oTable In oDom.getElementsByTagName("table")
+        With oTable.getElementsByTagName("tr")
+            If .Length > 0 Then
+                'MsgBox (.Item(0).innerText)
+                If InStr(.Item(0).innerText, Header) <> 0 Then
+                    Exit For
+                End If
+            End If
+        End With
+    Next oTable
+    
+    'Convert Table to excel
+    If oTable Is Nothing Then
+        MsgBox "Table not found", vbExclamation
+    Else
+        With oTable
+            ReDim data(1 To .Rows.Length, 1 To .Rows(1).Cells.Length)
+            For Each oRow In .Rows
+                For Each oCell In oRow.Cells
+                    data(x, y) = oCell.innerText
+                    y = y + 1
+                Next oCell
+                y = 1
+                x = x + 1
+            Next oRow
+        End With
+        ws.Cells(10, 1).Resize(UBound(data), UBound(data, 2)).Value = data
+    End If
+    
+    'Clear Memory
+    Set oDom = Nothing
+    Set oTable = Nothing
+    Set oRow = Nothing
+    Set oCell = Nothing
+    
+    'Output as .csv
+    Dim out As String
+    out = ws.Range("B7").Value
+    
+    'Allow saving to dynamic workbook directory
+    If Left(out, 2) = ".\" Then
+    out = Application.ThisWorkbook.Path & "\" & Right(out, Len(out) - 2)
+    End If
+    
+    Set tempWB = Application.Workbooks.Add(1)
+    With tempWB
+        .Sheets(1).Cells(1, 1).Resize(UBound(data), UBound(data, 2)).Value = data
+        .SaveAs FileName:=out, FileFormat:=xlCSV, CreateBackup:=False
+        .Close
+    End With
+    
+    'Restore functionality
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+    
+End Sub
+
